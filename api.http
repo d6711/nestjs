@@ -1,0 +1,15 @@
+
+@v1 = http://localhost:3000/v1
+
+POST http://localhost:3000/v1/auth/login HTTP/1.1
+Content-Type: : application/json
+
+
+{
+    "email":"dev.lequang176@gmail.com",
+    "password":"password"
+}
+###
+GET {{v1}} HTTP/1.1
+
+
