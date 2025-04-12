@@ -7,14 +7,14 @@ import { jwtConstants } from "./auth.constants";
 import { CacheModule } from "@nestjs/cache-manager";
 
 @Module({
-    imports: [
-        JwtModule.register({
-            global: true,
-            secret: jwtConstants.secret,
-            signOptions: { expiresIn: "5m" }
-        }),
-    ],
-    controllers: [AuthController],
-    providers: [AuthService, PrismaService]
+  imports: [
+    JwtModule.register({
+      global: true,
+      secret: jwtConstants.secret,
+      signOptions: { expiresIn: "5m" }
+    })
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, PrismaService]
 })
 export class AuthModule {}

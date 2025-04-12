@@ -1,11 +1,4 @@
-import {
-    ExceptionFilter,
-    Catch,
-    ArgumentsHost,
-    UnauthorizedException,
-    HttpStatus,
-    HttpException
-} from "@nestjs/common";
+import { ExceptionFilter, Catch, ArgumentsHost, UnauthorizedException, HttpStatus, HttpException } from "@nestjs/common";
 import { Response } from "express";
 import { ApiResponse } from "src/common/bases/api-response";
 
@@ -23,10 +16,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             const exceptionResponse = exception.getResponse();
             if (typeof exceptionResponse === "string") {
                 message = exceptionResponse;
-            } else if (
-                exceptionResponse &&
-                typeof exceptionResponse === "object"
-            ) {
+            } else if (exceptionResponse && typeof exceptionResponse === "object") {
                 const responseObj = exceptionResponse as { message?: string };
                 message = responseObj.message || "Network Error";
             }
@@ -35,9 +25,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
                 //     message = message || "Dữ liệu không hợp lệ";
                 //     break;
                 case HttpStatus.UNAUTHORIZED:
-                    message =
-                        message ||
-                        "Bạn cần đăng nhập để thực hiện hành động này";
+                    message = message || "Bạn cần đăng nhập để thực hiện hành động này";
                     break;
                 case HttpStatus.INTERNAL_SERVER_ERROR:
                     message = message || "Lỗi  INTERNAL_SERVER_ERROR ";

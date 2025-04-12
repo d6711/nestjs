@@ -8,29 +8,26 @@ import { Keyv } from "keyv";
 import { CacheableMemory } from "cacheable";
 
 @Module({
-    imports: [
-        AuthModule,
-        CacheModule.registerAsync({
-            isGlobal: true,
-            useFactory: async () => {
-                return {
-                    stores: [
-                        new Keyv({
-                            store: new CacheableMemory({
-                                ttl: 60000,
-                                lruSize: 5000
-                            }),
-                            namespace: "nestjs-memory-cache"
-                        }),
-                        createKeyv("redis://localhost:6379/1", {
-                            namespace: "nestjs-newbie"
-                        })
-                    ]
-                };
-            }
-        })
-    ],
-    controllers: [AppController],
-    providers: [AppService]
+  imports: [
+    AuthModule,
+    CacheModule.registerAsync({
+      isGlobal: true,
+      useFactory: async () => {
+        return {
+          stores: [
+            new Keyv({
+              store: new CacheableMemory({ ttl: 60000, lruSize: 5000 }),
+              namespace: "nestjs-memory-cache"
+            }),
+            createKeyv("redis://localhost:6379/1", {
+              namespace: "nestjs-newbie"
+            })
+          ]
+        };
+      }
+    })
+  ],
+  controllers: [AppController],
+  providers: [AppService]
 })
 export class AppModule {}
