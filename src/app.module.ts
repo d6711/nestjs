@@ -6,9 +6,11 @@ import { CacheModule } from "@nestjs/cache-manager";
 import { createKeyv } from "@keyv/redis";
 import { Keyv } from "keyv";
 import { CacheableMemory } from "cacheable";
+import { UserModule } from "./modules/user/user.module";
 
 @Module({
   imports: [
+    UserModule,
     AuthModule,
     CacheModule.registerAsync({
       isGlobal: true,

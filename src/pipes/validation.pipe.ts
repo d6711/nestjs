@@ -13,8 +13,8 @@ export class ValidationPipe implements PipeTransform<any> {
     const formatErrors = this.formatErrors(errors);
 
     if (errors.length > 0) {
-      const response = ApiResponse.error(formatErrors, "Failed", HttpStatus.BAD_REQUEST);
-      throw new HttpException(response, HttpStatus.BAD_REQUEST);
+      const response = ApiResponse.error(formatErrors, "Failed", HttpStatus.UNPROCESSABLE_ENTITY);
+      throw new HttpException(response, HttpStatus.UNPROCESSABLE_ENTITY);
     }
     return value;
   }

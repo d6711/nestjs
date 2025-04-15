@@ -1,4 +1,4 @@
-import { UserWithoutPassword } from "../users/user.interface";
+import { UserWithoutPassword } from "../user/user.interface";
 import { AuthRequest } from "./auth.request.dto";
 
 
@@ -13,6 +13,7 @@ export interface IJwtPayload {
   sub: string;
   exp: number;
   iat: number;
+  guard: string;
 }
 
 export interface ITokenContext {
@@ -22,7 +23,8 @@ export interface ITokenContext {
   crsfToken?: string,
   sessionId?: string,
   deviceId: string,
-  authRequest: AuthRequest
+  authRequest: AuthRequest,
+  guard: string
 }
 
 export interface ISessionData {

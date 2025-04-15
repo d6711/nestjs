@@ -1,15 +1,15 @@
-import { Inject, Injectable, InternalServerErrorException, Logger, UnauthorizedException } from "@nestjs/common";
+import { Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { AuthRequest } from "./auth.request.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import * as bcrypt from "bcrypt";
-import { UserWithoutPassword } from "../users/user.interface";
 import { IJwtPayload, ILoginResponse, ISessionData, ITokenContext } from "./auth.interface";
 import { JwtService } from "@nestjs/jwt";
 import { randomBytes } from "crypto";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
 import { Request } from "express";
-import { error } from "console";
+import { ExceptionHandler } from "src/utils/exception-handler.util";
+import { UserRepository } from "../user/user.repository";
 
 const REFRESH_TOKEN_TIME_TO_LIVE = 30 * 24 * 60 * 3600
 const MAX_SESSION_PER_USER = 5
@@ -22,12 +22,13 @@ export class AuthService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly userRepository: UserRepository,
     @Inject(CACHE_MANAGER) private cacheManager: Cache
   ) { }
 
-  async authenticate(authRequest: AuthRequest, request: Request): Promise<ILoginResponse> {
+  async authenticate(authRequest: AuthRequest, request: Request, guard: string): Promise<ILoginResponse> {
     try {
-      return await this.createAuthContext(authRequest, request)
+      return await this.createAuthContext(authRequest, request, guard)
         .then(context => this.validateUser(context))
         .then(context => this.revokeExistingDeviceSession(context))
         .then(context => this.generateAccessToken(context))
@@ -36,21 +37,16 @@ export class AuthService {
         .then(context => this.saveSession(context))
         .then(context => this.authResponse(context))
     } catch (error) {
-      if (error instanceof Error) {
-        this.logger.error(`Lỗi trong quá trính xác thực: ${error.message}`, error.stack)
-      }
-      if (error instanceof UnauthorizedException) {
-        throw error
-      }
-      throw new InternalServerErrorException('Có vấn đề xảy ra trong quá trình xác thực')
+      return ExceptionHandler.error(error, this.logger)
     }
   }
 
-  private async createAuthContext(authRequest: AuthRequest, request: Request): Promise<ITokenContext> {
+  private async createAuthContext(authRequest: AuthRequest, request: Request, guard: string): Promise<ITokenContext> {
     return Promise.resolve({
       authRequest,
       user: null,
-      deviceId: this.generateDeviceId(request)
+      deviceId: this.generateDeviceId(request),
+      guard: guard
     })
   }
 
@@ -64,20 +60,20 @@ export class AuthService {
     const { user, deviceId } = context
     if (!user || !deviceId) return context
     try {
-      const userSession: string[] = await this.cacheManager.get(`user:${user.createdAt}:sessions`) || []
+      const userSession: string[] = await this.cacheManager.get(`user:${user.createdAt}:sessions:${context.guard}`) || []
       let updateSession = [...userSession]
       for (let i = 0; i < userSession.length; i++) {
         const sessionId = userSession[i]
-        const session: ISessionData | null = await this.cacheManager.get(`session:${sessionId}`)
+        const session: ISessionData | null = await this.cacheManager.get(`session:${sessionId}:${context.guard}`)
         if (session && session.deviceId === deviceId) {
           session.isRevoked = true
-          await this.cacheManager.set(`session:${sessionId}`, session)
+          await this.cacheManager.set(`session:${sessionId}:${context.guard}`, session)
           updateSession = updateSession.filter(id => id !== sessionId)
           this.logger.log(`Đã vô hiệu hóa phiên ${sessionId} trên thiết bị ${deviceId}`)
         }
       }
       if (updateSession.length !== userSession.length) {
-        await this.cacheManager.set(`user:${user.id}:sessions`, updateSession)
+        await this.cacheManager.set(`user:${user.id}:sessions:${context.guard}`, updateSession)
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -88,7 +84,7 @@ export class AuthService {
   }
   private async generateAccessToken(context: ITokenContext): Promise<ITokenContext> {
     if (!context.user) throw new Error('Không có thông tin user trong context')
-    const payload = { sub: context.user.id.toString() }
+    const payload = { sub: context.user.id.toString(), guard: context.guard }
     context.accessToken = await this.jwtService.signAsync(payload)
     return context
   }
@@ -118,33 +114,33 @@ export class AuthService {
     }
     const userSessions: string[] = (await this.cacheManager.get(`user:${user.id}:sessions`)) ?? []
     if (userSessions.length >= MAX_SESSION_PER_USER) {
-      await this.removeOldesSession(user.id, userSessions)
+      await this.removeOldesSession(user.id, userSessions, context)
     }
     await Promise.all([
-      this.cacheManager.set(`session:${sessionId}`, sessionData, REFRESH_TOKEN_TIME_TO_LIVE),
-      this.cacheManager.set(`refresh_token:${refreshToken}`, sessionId, REFRESH_TOKEN_TIME_TO_LIVE),
-      this.cacheManager.set(`user:${user.id}:sessions`, [...userSessions, sessionId]),
+      this.cacheManager.set(`session:${sessionId}:${context.guard}`, sessionData, REFRESH_TOKEN_TIME_TO_LIVE),
+      this.cacheManager.set(`refresh_token:${refreshToken}:${context.guard}`, sessionId, REFRESH_TOKEN_TIME_TO_LIVE),
+      this.cacheManager.set(`user:${user.id}:sessions:${context.guard}`, [...userSessions, sessionId]),
 
     ])
     context.sessionId = sessionId
     return context
   }
-  private async removeOldesSession(userId: bigint, sessions: string[]): Promise<void> {
+  private async removeOldesSession(userId: bigint, sessions: string[], context: ITokenContext): Promise<void> {
     let oldesSessionId: string | null = null
     let oldesTimestamp = Infinity
     for (const sessionId of sessions) {
-      const session: ISessionData | null = await this.cacheManager.get(`session:${sessionId}`)
+      const session: ISessionData | null = await this.cacheManager.get(`session:${sessionId}:${context.guard}`)
       if (session && session.creaedAt < oldesTimestamp) {
         oldesTimestamp = session.creaedAt
         oldesSessionId = sessionId
       }
     }
     if (oldesSessionId) {
-      const oldesSession: ISessionData | null = await this.cacheManager.get(`session:${oldesSessionId}`)
+      const oldesSession: ISessionData | null = await this.cacheManager.get(`session:${oldesSessionId}:${context.guard}`)
       if (oldesSession) {
         oldesSession.isRevoked = true
-        await this.cacheManager.set(`session:${oldesSessionId}`, oldesSession)
-        await this.cacheManager.set(`user:${userId}:sessions`, sessions.filter(id => id !== oldesSessionId))
+        await this.cacheManager.set(`session:${oldesSessionId}:${context.guard}`, oldesSession)
+        await this.cacheManager.set(`user:${userId}:sessions:${context.guard}`, sessions.filter(id => id !== oldesSessionId))
       } else {
         this.logger.warn(`Không tìm thấy dữ liệu phiên cho sessionID ${oldesSessionId}`)
       }
